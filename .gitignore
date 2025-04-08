@@ -1,0 +1,28 @@
+# Node.js related
+node_modules/
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+.npm/
+
+# OS related files
+.DS_Store
+Thumbs.db
+.directory
+*.swp
+*.swo
+
+# Editor directories and files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# cursor-tools related
+.repomix*
+!.repomixignore
+cursor-tools.config.json
+
+# Logs
+logs/
+*.log

@@ -1,0 +1,255 @@
+#!/bin/bash
+
+# vibe-tools-init - Initialize a project with cursor-tools configuration
+# Usage: vibe-tools-init [OPTIONS] [PROJECT_DIR]
+# Options:
+#   -i, --init SOURCE_DIR   Initialize default template from SOURCE_DIR
+#   -f, --force             Force overwrite existing files
+#   -h, --help              Show this help message
+#   -v, --version           Show version information
+
+VERSION="0.1.1"
+set -e
+
+# ANSI color codes
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+DEFAULT_DIR="$HOME/.cursor-tools/default"
+FORCE=0
+INIT_MODE=0
+SOURCE_DIR=""
+DEST_DIR=""
+
+show_help() {
+  echo -e "${BOLD}vibe-tools-init${RESET} - Initialize a project with cursor-tools configuration"
+  echo -e "Usage: ${CYAN}vibe-tools-init${RESET} [OPTIONS] [${YELLOW}PROJECT_DIR${RESET}]"
+  echo -e "Options:"
+  echo -e "  ${GREEN}-i, --init${RESET} ${MAGENTA}SOURCE_DIR${RESET}   Initialize default template from SOURCE_DIR"
+  echo -e "  ${GREEN}-f, --force${RESET}             Force overwrite existing files"
+  echo -e "  ${GREEN}-h, --help${RESET}              Show this help message"
+  echo -e "  ${GREEN}-v, --version${RESET}           Show version information"
+  exit 0
+}
+
+show_version() {
+  echo -e "${BOLD}vibe-tools-init${RESET} version ${CYAN}$VERSION${RESET}"
+  exit 0
+}
+
+error() {
+  echo -e "${RED}${BOLD}ERROR:${RESET} $1" >&2
+  exit 1
+}
+
+warning() {
+  echo -e "${YELLOW}${BOLD}WARNING:${RESET} $1" >&2
+}
+
+success() {
+  echo -e "${GREEN}${BOLD}SUCCESS:${RESET} $1"
+}
+
+info() {
+  echo -e "${BLUE}${BOLD}INFO:${RESET} $1"
+}
+
+# Function to update .gitignore
+update_gitignore() {
+  local dir="$1"
+  GITIGNORE="$dir/.gitignore"
+  GITIGNORE_ENTRY="
+# cursor-tools
+.repomix*
+!.repomixignore
+cursor-tools.config.json"
+
+  if [[ -f "$GITIGNORE" ]]; then
+    if grep -q "# cursor-tools" "$GITIGNORE"; then
+      info "Gitignore already contains cursor-tools entries"
+    else
+      echo "$GITIGNORE_ENTRY" >> "$GITIGNORE" && \
+        info "Updated ${CYAN}.gitignore${RESET}"
+    fi
+  else
+    echo "$GITIGNORE_ENTRY" > "$GITIGNORE" && \
+      info "Created ${CYAN}.gitignore${RESET}"
+  fi
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -i|--init)
+      INIT_MODE=1
+      SOURCE_DIR="$2"
+      shift 2
+      ;;
+    -f|--force)
+      FORCE=1
+      shift
+      ;;
+    -h|--help)
+      show_help
+      ;;
+    -v|--version)
+      show_version
+      ;;
+    -*)
+      error "Unknown option: $1"
+      ;;
+    *)
+      if [[ -z "$DEST_DIR" ]]; then
+        DEST_DIR="$1"
+      else
+        error "Too many arguments. Run with --help for usage information."
+      fi
+      shift
+      ;;
+  esac
+done
+
+# Ensure we have the required arguments
+if [[ $INIT_MODE -eq 1 && -z "$SOURCE_DIR" ]]; then
+  error "Source directory must be specified with --init"
+fi
+
+# Create default directory if it doesn't exist
+mkdir -p "$DEFAULT_DIR"
+
+# Initialize from source project
+if [[ $INIT_MODE -eq 1 ]]; then
+  if [[ ! -d "$SOURCE_DIR" ]]; then
+    error "Source directory does not exist: $SOURCE_DIR"
+  fi
+  
+  # Check for required files in source
+  if [[ ! -f "$SOURCE_DIR/cursor-tools.config.json" ]]; then
+    error "Source directory is not a cursor-tools project (missing cursor-tools.config.json)"
+  fi
+  
+  # If no destination is provided, update the stored default configurations
+  if [[ -z "$DEST_DIR" ]]; then
+    # Copy files to default template
+    info "Initializing default template from ${CYAN}$SOURCE_DIR${RESET}"
+    
+    # Copy cursor-tools.config.json
+    cp "$SOURCE_DIR/cursor-tools.config.json" "$DEFAULT_DIR/" && \
+      info "Copied ${CYAN}cursor-tools.config.json${RESET}"
+    
+    # Copy .cursor/rules/ if it exists
+    if [[ -d "$SOURCE_DIR/.cursor/rules" ]]; then
+      mkdir -p "$DEFAULT_DIR/.cursor/rules"
+      cp -r "$SOURCE_DIR/.cursor/rules/"* "$DEFAULT_DIR/.cursor/rules/" && \
+        info "Copied ${CYAN}.cursor/rules/${RESET}"
+    fi
+    
+    # Copy .cursorrules if it exists (for backwards compatibility)
+    if [[ -f "$SOURCE_DIR/.cursorrules" ]]; then
+      cp "$SOURCE_DIR/.cursorrules" "$DEFAULT_DIR/" && \
+        info "Copied ${CYAN}.cursorrules${RESET}"
+    fi
+    
+    success "Default template initialized from ${CYAN}$SOURCE_DIR${RESET}"
+    exit 0
+  else
+    # If destination is provided, perform a temporary copy without updating stored configs
+    info "Copying configurations from ${CYAN}$SOURCE_DIR${RESET} to ${CYAN}$DEST_DIR${RESET} (not updating stored defaults)"
+    
+    # Ensure destination directory exists
+    mkdir -p "$DEST_DIR"
+    
+    # Copy cursor-tools.config.json
+    if [[ -f "$DEST_DIR/cursor-tools.config.json" && $FORCE -eq 0 ]]; then
+      warning "File ${CYAN}cursor-tools.config.json${RESET} already exists, skipping (use --force to overwrite)"
+    else
+      cp "$SOURCE_DIR/cursor-tools.config.json" "$DEST_DIR/" && \
+        info "Copied ${CYAN}cursor-tools.config.json${RESET}"
+    fi
+    
+    # Copy .cursor/rules/ if it exists
+    if [[ -d "$SOURCE_DIR/.cursor/rules" ]]; then
+      mkdir -p "$DEST_DIR/.cursor/rules"
+      if [[ -n "$(ls -A "$SOURCE_DIR/.cursor/rules/" 2>/dev/null)" ]]; then
+        cp -r "$SOURCE_DIR/.cursor/rules/"* "$DEST_DIR/.cursor/rules/" && \
+          info "Copied ${CYAN}.cursor/rules/${RESET}"
+      fi
+    fi
+    
+    # Copy .cursorrules if it exists (for backwards compatibility)
+    if [[ -f "$SOURCE_DIR/.cursorrules" ]]; then
+      if [[ -f "$DEST_DIR/.cursorrules" && $FORCE -eq 0 ]]; then
+        warning "File ${CYAN}.cursorrules${RESET} already exists, skipping (use --force to overwrite)"
+      else
+        cp "$SOURCE_DIR/.cursorrules" "$DEST_DIR/" && \
+          info "Copied ${CYAN}.cursorrules${RESET}"
+      fi
+    fi
+    
+    # Update .gitignore
+    update_gitignore "$DEST_DIR"
+    
+    success "Project initialized with cursor-tools configuration from ${CYAN}$SOURCE_DIR${RESET}! 🎉"
+    exit 0
+  fi
+fi
+
+# If we get here, we're not in init mode, so we need a destination
+if [[ -z "$DEST_DIR" ]]; then
+  error "Destination directory must be specified when not using --init"
+fi
+
+# Check if default template is empty
+if [[ ! -f "$DEFAULT_DIR/cursor-tools.config.json" && \
+      ! -d "$DEFAULT_DIR/.cursor/rules" && \
+      ! -f "$DEFAULT_DIR/.cursorrules" ]]; then
+  warning "Default template directory is empty (${CYAN}$DEFAULT_DIR${RESET})"
+  warning "Use --init to initialize the default template from an existing project"
+  exit 1
+fi
+
+# Ensure destination directory exists
+mkdir -p "$DEST_DIR"
+
+# Copy files from default template to destination
+info "Copying template files to ${CYAN}$DEST_DIR${RESET}"
+
+# Copy cursor-tools.config.json
+if [[ -f "$DEFAULT_DIR/cursor-tools.config.json" ]]; then
+  if [[ -f "$DEST_DIR/cursor-tools.config.json" && $FORCE -eq 0 ]]; then
+    warning "File ${CYAN}cursor-tools.config.json${RESET} already exists, skipping (use --force to overwrite)"
+  else
+    cp "$DEFAULT_DIR/cursor-tools.config.json" "$DEST_DIR/" && \
+      info "Copied ${CYAN}cursor-tools.config.json${RESET}"
+  fi
+fi
+
+# Copy .cursor/rules/ if it exists
+if [[ -d "$DEFAULT_DIR/.cursor/rules" ]]; then
+  mkdir -p "$DEST_DIR/.cursor/rules"
+  if [[ -n "$(ls -A "$DEFAULT_DIR/.cursor/rules/" 2>/dev/null)" ]]; then
+    cp -r "$DEFAULT_DIR/.cursor/rules/"* "$DEST_DIR/.cursor/rules/" && \
+      info "Copied ${CYAN}.cursor/rules/${RESET}"
+  fi
+fi
+
+# Copy .cursorrules if it exists (for backwards compatibility)
+if [[ -f "$DEFAULT_DIR/.cursorrules" ]]; then
+  if [[ -f "$DEST_DIR/.cursorrules" && $FORCE -eq 0 ]]; then
+    warning "File ${CYAN}.cursorrules${RESET} already exists, skipping (use --force to overwrite)"
+  else
+    cp "$DEFAULT_DIR/.cursorrules" "$DEST_DIR/" && \
+      info "Copied ${CYAN}.cursorrules${RESET}"
+  fi
+fi
+
+# Update .gitignore
+update_gitignore "$DEST_DIR"
+
+success "Project initialized with cursor-tools template! 🎉"
