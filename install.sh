@@ -200,13 +200,13 @@ if ! command -v cursor-tools &> /dev/null; then
     
     npm install || error "Failed to install cursor-tools dependencies"
     npm run build || error "Failed to build cursor-tools"
-    npm install -g . --prefix "$CURSOR_TOOLS_INSTALL_DIR" || error "Failed to install cursor-tools to $CURSOR_TOOLS_INSTALL_DIR"
+    npm install -g . || error "Failed to install cursor-tools globally"
     
     # Update PATH temporarily for version check
     export PATH="$CURSOR_TOOLS_INSTALL_DIR/bin:$PATH"
     CURSOR_TOOLS_VERSION=$(cursor-tools --version 2>/dev/null || echo "unknown")
     
-    echo -e "\n${BOLD}${GREEN}cursor-tools (${CURSOR_TOOLS_VERSION}) installed to ${CYAN}$CURSOR_TOOLS_INSTALL_DIR/bin${RESET}.${RESET} ${CYAN}${CURSOR_TOOLS_REPO}${RESET}"
+    echo -e "\n${BOLD}${GREEN}cursor-tools (${CURSOR_TOOLS_VERSION}) installed globally${RESET}.${RESET} ${CYAN}${CURSOR_TOOLS_REPO}${RESET}"
     echo -e "${BOLD}---${RESET}"
     
     # Add cursor-tools bin to PATH if not already there
