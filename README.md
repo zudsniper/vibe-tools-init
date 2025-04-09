@@ -14,7 +14,7 @@ A utility script to initialize projects with cursor-tools configuration. This to
 You can install `vibe-tools-init` using the provided install script:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zudsniper/vibe-tools-init/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/zudsniper/vibe-tools-init/master/install.sh | bash
 ```
 
 Or manually:
