@@ -185,16 +185,13 @@ if ! command -v cursor-tools &> /dev/null; then
     info "Installing cursor-tools from ${CYAN}$CURSOR_TOOLS_REPO${RESET} to ${CYAN}$CURSOR_TOOLS_INSTALL_DIR${RESET}..."
     
     # Create a subdirectory for cursor-tools
-    mkdir -p "./cursor-tools-temp" || error "Failed to create temporary cursor-tools directory"
-    
-    # Create installation directory if it doesn't exist
-    mkdir -p "$CURSOR_TOOLS_INSTALL_DIR" || error "Failed to create cursor-tools installation directory: $CURSOR_TOOLS_INSTALL_DIR"
+    mkdir -p "$CURSOR_TOOLS_INSTALL_DIR/cursor-tools" || error "Failed to create cursor-tools directory"
     
     # Clone cursor-tools repository
-    git clone "$CURSOR_TOOLS_REPO" "./cursor-tools-temp" || error "Failed to clone cursor-tools repository"
+    git clone "$CURSOR_TOOLS_REPO" "$CURSOR_TOOLS_INSTALL_DIR/cursor-tools" || error "Failed to clone cursor-tools repository"
     
     # Build and install cursor-tools
-    cd "./cursor-tools-temp" || error "Failed to navigate to cursor-tools directory"
+    cd "$CURSOR_TOOLS_INSTALL_DIR/cursor-tools" || error "Failed to navigate to cursor-tools directory"
     
     # Print Node.js information
     NODE_PATH=$(which node)
@@ -242,8 +239,6 @@ if ! command -v cursor-tools &> /dev/null; then
     echo -e "  to set up a project, navigate to the project working directory and execute '${MAGENTA}cursor-tools install .${RESET}'"
   else
     info "Skipping cursor-tools installation"
-    # Clean up cursor-tools temp directory
-    cd .. && rm -rf "./cursor-tools-temp"
   fi
 fi
 
