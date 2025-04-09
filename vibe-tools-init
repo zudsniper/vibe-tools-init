@@ -5,10 +5,11 @@
 # Options:
 #   -i, --init SOURCE_DIR   Initialize default template from SOURCE_DIR
 #   -f, --force             Force overwrite existing files
+#   -ir, --ignore-rules     Add .cursor/rules to .gitignore
 #   -h, --help              Show this help message
 #   -v, --version           Show version information
 
-VERSION="0.1.1"
+VERSION="0.2.1"
 set -e
 
 # ANSI color codes
@@ -24,8 +25,11 @@ RESET='\033[0m'
 DEFAULT_DIR="$HOME/.cursor-tools/default"
 FORCE=0
 INIT_MODE=0
+IGNORE_RULES=0
 SOURCE_DIR=""
 DEST_DIR=""
+IS_REMOTE_SOURCE=0
+IS_REMOTE_DEST=0
 
 show_help() {
   echo -e "${BOLD}vibe-tools-init${RESET} - Initialize a project with cursor-tools configuration"
@@ -33,8 +37,10 @@ show_help() {
   echo -e "Options:"
   echo -e "  ${GREEN}-i, --init${RESET} ${MAGENTA}SOURCE_DIR${RESET}   Initialize default template from SOURCE_DIR"
   echo -e "  ${GREEN}-f, --force${RESET}             Force overwrite existing files"
+  echo -e "  ${GREEN}-ir, --ignore-rules${RESET}     Add .cursor/rules to .gitignore"
   echo -e "  ${GREEN}-h, --help${RESET}              Show this help message"
   echo -e "  ${GREEN}-v, --version${RESET}           Show version information"
+  echo -e "\nNOTE: Both SOURCE_DIR and PROJECT_DIR support remote paths (user@host:/path)"
   exit 0
 }
 
@@ -60,6 +66,19 @@ info() {
   echo -e "${BLUE}${BOLD}INFO:${RESET} $1"
 }
 
+# Function to check if rsync is available
+check_rsync() {
+  if ! command -v rsync &> /dev/null; then
+    error "rsync is required for remote operations, but it's not installed"
+  fi
+}
+
+# Function to detect if a path is remote (e.g., user@host:/path or host:/path)
+is_remote_path() {
+  local path="$1"
+  [[ "$path" =~ .+:.+ ]]
+}
+
 # Function to update .gitignore
 update_gitignore() {
   local dir="$1"
@@ -69,6 +88,12 @@ update_gitignore() {
 .repomix*
 !.repomixignore
 cursor-tools.config.json"
+
+  # If the IGNORE_RULES flag is set, add .cursor/rules to gitignore
+  if [[ $IGNORE_RULES -eq 1 ]]; then
+    GITIGNORE_ENTRY+="
+.cursor/rules/"
+  fi
 
   if [[ -f "$GITIGNORE" ]]; then
     if grep -q "# cursor-tools" "$GITIGNORE"; then
@@ -93,6 +118,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     -f|--force)
       FORCE=1
+      shift
+      ;;
+    -ir|--ignore-rules)
+      IGNORE_RULES=1
       shift
       ;;
     -h|--help)
@@ -123,14 +152,49 @@ fi
 # Create default directory if it doesn't exist
 mkdir -p "$DEFAULT_DIR"
 
+# Check if paths are remote
+if [[ -n "$SOURCE_DIR" ]]; then
+  if is_remote_path "$SOURCE_DIR"; then
+    IS_REMOTE_SOURCE=1
+    check_rsync
+    info "Remote source detected: ${CYAN}$SOURCE_DIR${RESET}"
+  fi
+fi
+
+if [[ -n "$DEST_DIR" ]]; then
+  if is_remote_path "$DEST_DIR"; then
+    IS_REMOTE_DEST=1
+    check_rsync
+    info "Remote destination detected: ${CYAN}$DEST_DIR${RESET}"
+  fi
+fi
+
 # Initialize from source project
 if [[ $INIT_MODE -eq 1 ]]; then
-  if [[ ! -d "$SOURCE_DIR" ]]; then
+  if [[ $IS_REMOTE_SOURCE -eq 0 && ! -d "$SOURCE_DIR" ]]; then
     error "Source directory does not exist: $SOURCE_DIR"
+  fi
+  
+  # Create a temp directory for remote files if needed
+  TEMP_DIR=""
+  if [[ $IS_REMOTE_SOURCE -eq 1 ]]; then
+    TEMP_DIR=$(mktemp -d)
+    info "Creating temporary directory for remote files: ${CYAN}$TEMP_DIR${RESET}"
+    
+    # Use rsync to copy the required files from the remote source
+    if ! rsync -azP "${SOURCE_DIR}/cursor-tools.config.json" "$TEMP_DIR/" &>/dev/null; then
+      rm -rf "$TEMP_DIR"
+      error "Failed to sync required files from remote source: cannot find cursor-tools.config.json"
+    fi
+    
+    # Temporarily point SOURCE_DIR to the temp directory for the rest of the script
+    ORIGINAL_SOURCE_DIR="$SOURCE_DIR"
+    SOURCE_DIR="$TEMP_DIR"
   fi
   
   # Check for required files in source
   if [[ ! -f "$SOURCE_DIR/cursor-tools.config.json" ]]; then
+    [[ -n "$TEMP_DIR" ]] && rm -rf "$TEMP_DIR"
     error "Source directory is not a cursor-tools project (missing cursor-tools.config.json)"
   fi
   
@@ -144,33 +208,72 @@ if [[ $INIT_MODE -eq 1 ]]; then
       info "Copied ${CYAN}cursor-tools.config.json${RESET}"
     
     # Copy .cursor/rules/ if it exists
-    if [[ -d "$SOURCE_DIR/.cursor/rules" ]]; then
+    if [[ $IS_REMOTE_SOURCE -eq 1 ]]; then
+      # Additional rsync for .cursor/rules directory from the remote source
       mkdir -p "$DEFAULT_DIR/.cursor/rules"
-      cp -r "$SOURCE_DIR/.cursor/rules/"* "$DEFAULT_DIR/.cursor/rules/" && \
-        info "Copied ${CYAN}.cursor/rules/${RESET}"
+      if rsync -azP "${ORIGINAL_SOURCE_DIR}/.cursor/rules/" "$DEFAULT_DIR/.cursor/rules/" &>/dev/null; then
+        info "Copied ${CYAN}.cursor/rules/${RESET} from remote source"
+      fi
+      
+      # Additional rsync for .cursorrules from the remote source
+      if rsync -azP "${ORIGINAL_SOURCE_DIR}/.cursorrules" "$DEFAULT_DIR/" &>/dev/null; then
+        info "Copied ${CYAN}.cursorrules${RESET} from remote source"
+      fi
+    else
+      # Local file operations
+      if [[ -d "$SOURCE_DIR/.cursor/rules" ]]; then
+        mkdir -p "$DEFAULT_DIR/.cursor/rules"
+        cp -r "$SOURCE_DIR/.cursor/rules/"* "$DEFAULT_DIR/.cursor/rules/" 2>/dev/null && \
+          info "Copied ${CYAN}.cursor/rules/${RESET}"
+      fi
+      
+      # Copy .cursorrules if it exists (for backwards compatibility)
+      if [[ -f "$SOURCE_DIR/.cursorrules" ]]; then
+        cp "$SOURCE_DIR/.cursorrules" "$DEFAULT_DIR/" && \
+          info "Copied ${CYAN}.cursorrules${RESET}"
+      fi
     fi
     
-    # Copy .cursorrules if it exists (for backwards compatibility)
-    if [[ -f "$SOURCE_DIR/.cursorrules" ]]; then
-      cp "$SOURCE_DIR/.cursorrules" "$DEFAULT_DIR/" && \
-        info "Copied ${CYAN}.cursorrules${RESET}"
+    # Clean up temp directory if we created one
+    if [[ -n "$TEMP_DIR" ]]; then
+      rm -rf "$TEMP_DIR"
+      success "Default template initialized from remote source ${CYAN}$ORIGINAL_SOURCE_DIR${RESET}"
+    else
+      success "Default template initialized from ${CYAN}$SOURCE_DIR${RESET}"
     fi
-    
-    success "Default template initialized from ${CYAN}$SOURCE_DIR${RESET}"
     exit 0
   else
     # If destination is provided, perform a temporary copy without updating stored configs
     info "Copying configurations from ${CYAN}$SOURCE_DIR${RESET} to ${CYAN}$DEST_DIR${RESET} (not updating stored defaults)"
     
-    # Ensure destination directory exists
-    mkdir -p "$DEST_DIR"
+    # Ensure destination directory exists if it's local
+    if [[ $IS_REMOTE_DEST -eq 0 ]]; then
+      mkdir -p "$DEST_DIR"
+    fi
     
     # Copy cursor-tools.config.json
-    if [[ -f "$DEST_DIR/cursor-tools.config.json" && $FORCE -eq 0 ]]; then
-      warning "File ${CYAN}cursor-tools.config.json${RESET} already exists, skipping (use --force to overwrite)"
+    if [[ $IS_REMOTE_DEST -eq 1 ]]; then
+      # For remote destinations, always transfer the file 
+      # (rsync will handle conflicts based on the --force flag)
+      if [[ $FORCE -eq 1 ]]; then
+        rsync_opts="-azP --delete"
+      else
+        rsync_opts="-azP --ignore-existing"
+      fi
+      
+      if rsync $rsync_opts "$SOURCE_DIR/cursor-tools.config.json" "${DEST_DIR}/"; then
+        info "Copied ${CYAN}cursor-tools.config.json${RESET} to remote destination"
+      else
+        warning "Failed to copy cursor-tools.config.json to remote destination"
+      fi
     else
-      cp "$SOURCE_DIR/cursor-tools.config.json" "$DEST_DIR/" && \
-        info "Copied ${CYAN}cursor-tools.config.json${RESET}"
+      # Local destination handling
+      if [[ -f "$DEST_DIR/cursor-tools.config.json" && $FORCE -eq 0 ]]; then
+        warning "File ${CYAN}cursor-tools.config.json${RESET} already exists, skipping (use --force to overwrite)"
+      else
+        cp "$SOURCE_DIR/cursor-tools.config.json" "$DEST_DIR/" && \
+          info "Copied ${CYAN}cursor-tools.config.json${RESET}"
+      fi
     fi
     
     # Copy .cursor/rules/ if it exists
