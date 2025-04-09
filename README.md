@@ -1,6 +1,7 @@
-# vibe-tools-init
+# vibe-tools-init <sup><i>or cursor-tools-init</i></sup>
+> by [`@zudsniper`](https://github.com/zudsniper)  
 
-A utility script to initialize projects with cursor-tools configuration. This tool makes it easy to set up and manage your cursor-tools configuration across multiple projects.
+A super simple utility script to initialize projects with [cursor-tools](https://github.com/eastlondoner/cursor-tools) configuration. This tool makes it easy to set up and manage your cursor-tools configuration across multiple projects.  
 
 ## Features
 
